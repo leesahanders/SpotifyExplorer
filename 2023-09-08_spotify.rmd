@@ -68,14 +68,15 @@ This requires having http://localhost:1410/ added to the list of redirect URL's 
 
 #### Playlists
 
-```{r}
+Get playlists
 
+```{r}
+if(!exists('pl')){
 
 # pl <- get_my_playlists(limit = 20, offset = 0,
 #   authorization = get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)]),
 #   include_meta_info = FALSE)
 
-# Get playlists
 i_max = 221
 limit = 25
 
@@ -93,8 +94,18 @@ include_meta_info = FALSE)
   pl <- rbind(pl, pl_tmp)
 }
 
-# Get tracks
-tracks <- data.frame()
+}
+
+```
+
+Get tracks
+
+TODO: Add logic for playlists with >100 songs 
+
+```{r}
+if(!exists('pl_tracks')){
+  
+pl_tracks <- data.frame()
 count_playlists <- nrow(pl)
 
 for (i in 1:nrow(pl)) {
@@ -108,87 +119,84 @@ for (i in 1:nrow(pl)) {
   offset = 0, market = NULL, #authorization = get_spotify_access_token(scope = scopes()[c(7,8,9,10,14,15)]),
   include_meta_info = FALSE)
 
-  tracks_tmp$playlist_id <- rep(c(playlist_id),times=c(nrow(tracks_tmp)))
+  pl_tracks_tmp$playlist_id <- rep(c(playlist_id),times=c(nrow(tracks_tmp)))
   
-  tracks <- rbind(tracks, tracks_tmp)
+  pl_tracks <- rbind(pl_tracks, pl_tracks_tmp)
 }
 
-
+}
 ```
 
-
-
-
-
-
-### Data Preparation
+Saved tracks
 
 ```{r}
 # Data Preparation --------------------------------------------------------
 # Follow the instructions here: https://www.rcharlie.com/spotifyr/ 
 if(!exists('track_features')){
 
-  id <- 'a41f9a0aea274995a97901daeef8fea5'
-  secret <- '1b9b37c00c814902a7b22980ab2da1c7'
-  Sys.setenv(SPOTIFY_CLIENT_ID = id)
-  Sys.setenv(SPOTIFY_CLIENT_SECRET = secret)
-  access_token <- get_spotify_access_token()
+id <- 'a41f9a0aea274995a97901daeef8fea5'
+secret <- '1b9b37c00c814902a7b22980ab2da1c7'
+Sys.setenv(SPOTIFY_CLIENT_ID = id)
+Sys.setenv(SPOTIFY_CLIENT_SECRET = secret)
+access_token <- get_spotify_access_token()
+
+# More permissions needed. This requires having http://localhost:1410/ added to the list of redirect URL's through https://developer.spotify.com/dashboard/applications/ 
+my_id <- '12162125686'
+
+# Get my saved songs 
+tracks <- data.frame()
+artists_genres <- data.frame()
+track_features <- data.frame()
+
+i_max = 221
+limit = 25
+
+for(i in 1:i_max){
+  print(paste0("Running ", i , " out of ", i_max))
+
+  offset = limit * i - limit 
   
-  # More permissions needed. This requires having http://localhost:1410/ added to the list of redirect URL's through https://developer.spotify.com/dashboard/applications/ 
-  my_id <- '12162125686'
+  tracks_tmp <- get_my_saved_tracks(limit = limit, offset = offset, authorization = get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)]),) %>%
+    unnest(track.artists) %>%
+    unnest(track.album.release_date) %>%
+    unique() %>%
+    filter(!is.null(name))
   
-  # Get my saved songs 
-  tracks <- data.frame()
-  artists_genres <- data.frame()
-  track_features <- data.frame()
+  artists_genres_tmp <- get_artists(unique(tracks_tmp$id)) 
+  # artists_genres_tmp <- get_artists(unique(tracks_tmp$id)) 
   
-  i_max = 221
-  limit = 25
+  track_features_tmp <- get_track_audio_features(tracks_tmp$track.id)
   
-  for(i in 1:i_max){
-    print(paste0("Running ", i , " out of ", i_max))
-  
-    offset = limit * i - limit 
-    
-    tracks_tmp <- get_my_saved_tracks(limit = limit, offset = offset, authorization = get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)]),) %>%
-      unnest(track.artists) %>%
-      unnest(track.album.release_date) %>%
-      unique() %>%
-      filter(!is.null(name))
-    
-    artists_genres_tmp <- get_artists(unique(tracks_tmp$id)) 
-    # artists_genres_tmp <- get_artists(unique(tracks_tmp$id)) 
-    
-    track_features_tmp <- get_track_audio_features(tracks_tmp$track.id)
-    
-    tracks <- rbind(tracks, tracks_tmp)
-    artists_genres <- rbind(artists_genres, artists_genres_tmp)
-    track_features <- rbind(track_features, track_features_tmp)
-  }
-  
-  
-  names(artists_genres) <- paste("genre", names(artists_genres), sep="_")
-  names(track_features) <- paste("features", names(track_features), sep="_")
-  
-  artists_tracks_merge <- merge(tracks, artists_genres, by.x = "id", by.y = "genre_id" ) %>%
-    mutate(date_raw = track.album.release_date) %>%
-    #select(date_raw) %>%
-    mutate(date_date = as.Date(date_raw, format="%Y-%m-%d")) %>%
-    mutate(date_year = ifelse(is.na(date_date), date_raw, year(date_date))) %>%
-    mutate(date_year = as.numeric(date_year)) %>%
-    mutate(qty = 1) %>%
-    group_by(name, date_year) %>%
-    mutate(artist_qty = sum(qty)) %>%
-    ungroup() %>%
-    arrange(date_year)
-  
-  track_features_artists_tracks_merge <- merge(artists_tracks_merge, track_features, by.x = "track.id", by.y = "features_id")
+  tracks <- rbind(tracks, tracks_tmp)
+  artists_genres <- rbind(artists_genres, artists_genres_tmp)
+  track_features <- rbind(track_features, track_features_tmp)
+}
+
+
+names(artists_genres) <- paste("genre", names(artists_genres), sep="_")
+names(track_features) <- paste("features", names(track_features), sep="_")
+
+artists_tracks_merge <- merge(tracks, artists_genres, by.x = "id", by.y = "genre_id" ) %>%
+  mutate(date_raw = track.album.release_date) %>%
+  #select(date_raw) %>%
+  mutate(date_date = as.Date(date_raw, format="%Y-%m-%d")) %>%
+  mutate(date_year = ifelse(is.na(date_date), date_raw, year(date_date))) %>%
+  mutate(date_year = as.numeric(date_year)) %>%
+  mutate(qty = 1) %>%
+  group_by(name, date_year) %>%
+  mutate(artist_qty = sum(qty)) %>%
+  ungroup() %>%
+  arrange(date_year)
+
+track_features_artists_tracks_merge <- merge(artists_tracks_merge, track_features, by.x = "track.id", by.y = "features_id")
   
 }
 
 ```
 
-### Visualization over time
+### Visualizations
+
+Visualization over time
 
 ```{r}
 #### Visualization over time ####
@@ -202,7 +210,7 @@ p
 
 ```
 
-### Visualization of circle bar chart
+Visualization of circle bar chart
 
 ```{r}
 #### Visualization of circle bar chart ####
@@ -258,7 +266,7 @@ p <- ggplot(data, aes(x=as.factor(id), y=value)) +       # Note that id is a fac
 p
 ```
 
-### Visualization of wordcloud
+Word cloud
 
 ```{r}
 #### Visualization of wordcloud ####
