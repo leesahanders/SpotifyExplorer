@@ -42,7 +42,22 @@ First, set up a Dev account with Spotify to access their Web API [here](https://
 Sys.setenv(SPOTIFY_CLIENT_ID = 'a41f9a0aea274995a97901daeef8fea5')
 Sys.setenv(SPOTIFY_CLIENT_SECRET = '1b9b37c00c814902a7b22980ab2da1c7')
 
-access_token <- get_spotify_access_token()
+# usethis::edit_r_environ()
+
+# access_token <- get_spotify_access_token()
+#
+# get_spotify_authorization_code()
+# 
+# get_spotify_authorization_code(client_id = Sys.getenv("SPOTIFY_CLIENT_ID"),
+#   client_secret = Sys.getenv("SPOTIFY_CLIENT_SECRET"),
+#   scope = spotifyr::scopes)
+#
+# get_spotify_authorization_code(client_id = Sys.getenv("SPOTIFY_CLIENT_ID"),
+#   client_secret = Sys.getenv("SPOTIFY_CLIENT_SECRET"), scope = scopes()[c(7,8,9,10,14,15)])
+
+get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)])
+
+my_id <- '12162125686'
 ```
 
 
@@ -51,16 +66,54 @@ This requires having http://localhost:1410/ added to the list of redirect URL's 
 
 ### Data Preparation
 
-```{r}
-my_id <- '12162125686'
-```
-
 #### Playlists
 
 ```{r}
-pl <- get_my_playlists(limit = 20, offset = 0,
-  authorization = get_spotify_authorization_code(),
+
+
+# pl <- get_my_playlists(limit = 20, offset = 0,
+#   authorization = get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)]),
+#   include_meta_info = FALSE)
+
+# Get playlists
+i_max = 221
+limit = 25
+
+pl <- data.frame()
+
+for(i in 1:i_max){
+  print(paste0("Running ", i , " out of ", i_max))
+
+  offset = limit * i - limit 
+  
+  pl_tmp <- get_my_playlists(limit = limit, offset = offset,
+authorization = get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)]),
+include_meta_info = FALSE)
+  
+  pl <- rbind(pl, pl_tmp)
+}
+
+# Get tracks
+tracks <- data.frame()
+count_playlists <- nrow(pl)
+
+for (i in 1:nrow(pl)) {
+  print(paste0("Processing playlist ", i, " of ", nrow(pl)))
+  #print(pl$id[i])
+  #playlist_id = pl$id[i]
+  
+  playlist_id = "2rWuqvy2Vs6MPAgkZcgMiA" # For dev
+  
+  tracks_tmp <- get_playlist_tracks(playlist_id, fields = NULL, limit = 100,
+  offset = 0, market = NULL, #authorization = get_spotify_access_token(scope = scopes()[c(7,8,9,10,14,15)]),
   include_meta_info = FALSE)
+
+  tracks_tmp$playlist_id <- rep(c(playlist_id),times=c(nrow(tracks_tmp)))
+  
+  tracks <- rbind(tracks, tracks_tmp)
+}
+
+
 ```
 
 
@@ -97,7 +150,7 @@ if(!exists('track_features')){
   
     offset = limit * i - limit 
     
-    tracks_tmp <- get_my_saved_tracks(limit = limit, offset = offset) %>%
+    tracks_tmp <- get_my_saved_tracks(limit = limit, offset = offset, authorization = get_spotify_authorization_code(scope = scopes()[c(7,8,9,10,14,15)]),) %>%
       unnest(track.artists) %>%
       unnest(track.album.release_date) %>%
       unique() %>%
