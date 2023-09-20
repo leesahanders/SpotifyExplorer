@@ -23,6 +23,7 @@ library(plotly)
 library(ggplot2)
 library(wordcloud2) 
 library(ggExtra)
+library(lubridate)
 
 # Resources
 #https://www.rcharlie.com/spotifyr/
@@ -95,7 +96,6 @@ include_meta_info = FALSE)
 }
 
 }
-
 ```
 
 Get tracks
@@ -172,7 +172,6 @@ for(i in 1:i_max){
   track_features <- rbind(track_features, track_features_tmp)
 }
 
-
 names(artists_genres) <- paste("genre", names(artists_genres), sep="_")
 names(track_features) <- paste("features", names(track_features), sep="_")
 
@@ -196,19 +195,88 @@ track_features_artists_tracks_merge <- merge(artists_tracks_merge, track_feature
 
 ### Visualizations
 
-Visualization over time
+Bar visualization of tracks liked over recorded time
 
 ```{r}
-#### Visualization over time ####
-g <- ggplot(artists_tracks_merge, aes(x=date_year, y=qty, fill = paste0(name))) + 
-  geom_bar(position="stack", stat = "identity", width=0.9) +
-  scale_fill_manual("legend", values = rep_len( c("skyblue"), nrow(artists_tracks_merge))) +
+tmp <- artists_tracks_merge %>% 
+  group_by(date_year) %>%
+  filter(date_year != 0 ) %>%
+  # summarize(count = n()) %>%
+  summarize(count = n_distinct(track.name)) %>%
+  mutate(date_year = lubridate::ymd(date_year, truncated = 2L))
+
+g <- ggplot(tmp, aes(x=date_year, y=count)) + 
+  #geom_bar(position="stack", stat = "identity", width=0.9) +
+  #geom_bar(position="stack", stat = "identity", width=12) +
+  geom_bar(position="stack", stat = "identity") +
+  scale_fill_manual("legend", values = rep_len( c("skyblue"), nrow(tmp))) +
+  scale_x_date(date_labels = "%Y") + 
+  #scale_x_date(breaks = dates) + 
   theme_bw() + 
   theme(legend.position="none")
+
+p <- ggplotly(g)
+p
+```
+
+Bar visualization of tracks liked by added time
+
+```{r}
+tmp <- artists_tracks_merge %>% 
+  mutate(added_date = as.Date(added_at, format="%Y-%m-%d")) %>%
+  mutate(added_date_year = year(added_date)) %>%
+  mutate(added_date_year = as.numeric(added_date_year)) %>%
+  ungroup() %>%
+  select(added_date_year, name, track.name) %>%
+  unique() %>%
+  group_by(added_date_year) %>%
+  summarize(count = n_distinct(track.name)) %>%
+  mutate(added_date_year = lubridate::ymd(added_date_year, truncated = 2L))
+
+g <- ggplot(tmp, aes(x=added_date_year, y=count)) + 
+  #geom_bar(position="stack", stat = "identity", width=0.9) +
+  #geom_bar(position="stack", stat = "identity", width=12) +
+  geom_bar(position="stack", stat = "identity") +
+  scale_fill_manual("legend", values = rep_len( c("skyblue"), nrow(tmp))) +
+  scale_x_date(date_labels = "%Y") + 
+  #scale_x_date(breaks = dates) + 
+  theme_bw() + 
+  theme(legend.position="none")
+
+p <- ggplotly(g)
+p
+```
+
+Scatterplot visualization of tracks liked by feature programmatically
+
+```{r}
+feature_plot_select_options <- c("features_danceability", "features_energy", "features_key", "features_loudness", "features_mode", "features_speechiness", "features_acousticness", "features_instrumentalness", "features_liveness", "features_valence", "features_tempo", "features_type", "features_uri", "features_track_href", "features_analysis_url", "features_duration_ms", "features_time_signature")
+
+feature_plot_select <- dplyr::sym("features_danceability")
+
+tmp <- track_features_artists_tracks_merge %>% 
+  mutate(added_date = as.Date(added_at, format="%Y-%m-%d")) %>%
+  mutate(added_date_year = year(added_date)) %>%
+  select(added_date, added_date_year, name, track.name, track.album.name, track.album.release_date, genre_genres, features_danceability, features_energy, features_key, features_loudness, features_mode, features_speechiness, features_acousticness, features_instrumentalness, features_liveness, features_valence, features_tempo, features_type, features_uri, features_track_href, features_analysis_url, features_duration_ms, features_time_signature) %>%
+  unique() %>%
+  filter(genre_genres != "character(0)")
+
+# g <- ggplot(tmp, aes(x=added_date, y=features_danceability, fill=name)) + #, color=genre_genres
+# g <- ggplot(tmp, aes(x=added_date, y={{feature_plot_select}}, fill=name)) + #, color=genre_genres
+g <- ggplot(tmp, aes(x=added_date, y=!!feature_plot_select, fill=name)) + #, color=genre_genres
+  geom_point() +
+  scale_fill_manual("legend", values = rep_len( c("skyblue"), nrow(tmp))) +
+  theme_bw() + 
+  theme(legend.position="none") 
+
+g1 <- ggMarginal(g, type="histogram")
+g1
+
 p <- ggplotly(g)
 p
 
 ```
+
 
 Visualization of circle bar chart
 
@@ -256,7 +324,6 @@ p <- ggplot(data, aes(x=as.factor(id), y=value)) +       # Note that id is a fac
     panel.grid = element_blank(),
     plot.margin = unit(rep(-1,4), "cm")      # Adjust the margin to make in sort labels are not truncated!
   ) +
-  
   # This makes the coordinate polar instead of cartesian.
   coord_polar(start = 0) +
   
@@ -280,7 +347,6 @@ wordcloud2(data %>% rename("word" = "genre_genres", "freq" = "value") %>% select
 #### Danceability vs Acousticness
 
 ```{r}
-#### Visualization by features ####
 data2 <- track_features_artists_tracks_merge %>%
   unnest(genre_genres)
 
@@ -300,3 +366,4 @@ ggplotly(p)
  - https://www.reddit.com/r/dataisbeautiful/comments/h7uoia/oc_network_of_artist_genres_in_spotify/
  - https://www.rcharlie.com/spotifyr/ 
  - http://developer.spotify.com/community/showcase/music-popcorn/
+ - https://data-se.netlify.app/2022/09/28/programmatically-plotting-with-ggplot2/
